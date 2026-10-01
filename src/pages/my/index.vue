@@ -1,384 +1,71 @@
+<script setup>
+import { computed } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import ProductCard from '@/component/ProductCard.vue'
+import { COUPONS, PRODUCTS } from '@/data/catalog'
+import { useAppStore } from '@/store/app'
+
+const store = useAppStore()
+const favorites = computed(() => PRODUCTS.filter((product) => store.state.favoriteIds.includes(product.id)))
+const availableCoupons = computed(() => COUPONS.filter((coupon) => store.state.couponIds.includes(coupon.id)))
+const activeOrder = computed(() => store.state.orders.find((order) => ['making','ready'].includes(order.status)))
+const levelProgress = computed(() => Math.min(100, Math.round(store.state.user.points / store.state.user.nextLevelPoints * 100)))
+onShow(() => {})
+
+function openProduct(product) { uni.navigateTo({ url: `/pages/item-detail/index?id=${product.id}` }) }
+function quickAdd(product) { product.options.length ? openProduct(product) : (store.addToCart(product.id), uni.showToast({ title: '已加入购物袋', icon: 'success' })) }
+function showFeature(message) { uni.showToast({ title: message, icon: 'none' }) }
+</script>
+
 <template>
-  <view class="body">
-    <view class="top-info box">
-      <view class="info-box box">
-        <view class="avatar">
-          <image :src="userInfo.avatarUrl || '@/static/image/avatar/default.jpg'" mode="widthFix" class="avatar-img" />
-        </view>
-        <view class="user-name" @click="handleLogin">
-          {{ userInfo ? userInfo.nickName : '点击登录' }}
-        </view>
+  <view class="page-shell my-page">
+    <view class="profile-hero">
+      <view class="brand-line"><text>MEMBER CENTER</text><button @click="uni.navigateTo({ url: '/pages/setting/index' })">设置</button></view>
+      <view class="profile-row">
+        <view class="avatar">学</view>
+        <view class="profile-main"><text class="user-name">{{ store.state.user.name }}</text><text class="user-title">{{ store.state.user.title }} · LV.{{ store.state.user.level }}</text></view>
+        <view class="points"><text>{{ store.state.user.points }}</text><text>成长豆</text></view>
+      </view>
+      <view class="level-bar"><view :style="{ width: `${levelProgress}%` }" /></view>
+      <text class="level-copy">距离下一等级还差 {{ Math.max(0, store.state.user.nextLevelPoints - store.state.user.points) }} 成长豆</text>
+    </view>
+
+    <view class="quick-panel card">
+      <view class="quick-item" @click="uni.navigateTo({ url: '/pages/my-order/index' })"><text class="quick-number">{{ store.state.orders.length }}</text><text>全部订单</text></view>
+      <view class="quick-item" @click="showFeature('优惠券已在结算页可用')"><text class="quick-number">{{ availableCoupons.length }}</text><text>优惠券</text></view>
+      <view class="quick-item" @click="showFeature('收藏商品见下方')"><text class="quick-number">{{ favorites.length }}</text><text>我的收藏</text></view>
+      <view class="quick-item" @click="showFeature('成长体系为本地演示')"><text class="quick-number">{{ store.state.user.level }}</text><text>会员等级</text></view>
+    </view>
+
+    <view v-if="activeOrder" class="section">
+      <view class="section-heading"><text class="section-title">进行中的订单</text><text class="section-link" @click="uni.navigateTo({ url: '/pages/my-order/index' })">全部订单</text></view>
+      <view class="active-order card" @click="uni.navigateTo({ url: `/pages/settled/index?id=${activeOrder.id}` })">
+        <view class="active-symbol">{{ activeOrder.status === 'ready' ? '待取' : '制作' }}</view>
+        <view class="active-main"><text>{{ activeOrder.statusText }} · 取餐码 {{ activeOrder.pickupCode }}</text><text>{{ activeOrder.storeName }}</text></view>
+        <text class="arrow">›</text>
       </view>
     </view>
 
-    <!-- 积分卡片 -->
-    <view class="integral-card box">
-      <view class="card-content">
-        <view class="integral-info">
-          <view class="integral-label" @click="handleLogin">
-            <uni-icons type="vip" color="white" size="20"></uni-icons>
-            {{ userInfo && !userInfo.isTourist ? userInfo.level : '登录享积分' }}
-          </view>
-          <view class="integral-value">{{ userInfo && !userInfo.isTourist ? userInfo.ponit : 0 }}</view>
-        </view>
-        <view class="progress-section">
-          <view class="progress-bar">
-            <view class="progress-fill" :style="{ width: progressPercentage + '%' }"></view>
-          </view>
-          <view class="progress-text">
-            <!-- <text>还需{{ userInfo.nextLevelNeed }}积分升级</text> -->
-          </view>
-        </view>
+    <view class="section">
+      <view class="section-heading"><text class="section-title">常用服务</text></view>
+      <view class="services card">
+        <view class="service-item" @click="uni.navigateTo({ url: '/pages/my-order/index' })"><text>订单记录</text><text>查看历史订单</text></view>
+        <view class="service-item" @click="uni.switchTab({ url: '/pages/shop/index' })"><text>门店地图</text><text>查找附近门店</text></view>
+        <view class="service-item" @click="showFeature('开票服务为展示入口')"><text>申请开票</text><text>管理开票信息</text></view>
+        <view class="service-item" @click="showFeature('客服工作时间 08:00-22:00')"><text>帮助客服</text><text>服务时间 08:00-22:00</text></view>
       </view>
     </view>
 
-    <!-- 功能按钮 -->
-    <view class="feature-list box">
-      <view class="feature-item" v-for="(item, index) in visibleFeatures" :key="index"
-        @click="commonNavigate(item.navigation, item.authority)">
-        <view class="feature-icon">
-          <uni-icons :type="item.icon" :color="item.color" size="30"></uni-icons>
-        </view>
-        <view class="feature-title">{{ item.title }}</view>
-      </view>
-      <view class="feature-expand-btn" @click="toggleExpand">
-        <uni-icons :type="isExpanded ? 'up' : 'down'" color="" size="20" />
-      </view>
+    <view class="section favorite-section">
+      <view class="section-heading"><text class="section-title">我的常点</text><text class="section-link">{{ favorites.length }} 款收藏</text></view>
+      <view v-if="favorites.length" class="favorite-list"><ProductCard v-for="product in favorites" :key="product.id" :product="product" @open="openProduct" @add="quickAdd" /></view>
+      <view v-else class="empty-favorite card">还没有收藏，去点单页发现喜欢的口味吧</view>
     </view>
 
-    <!-- 活动卡 -->
-    <view class="activity-list" v-if="activity.length > 0">
-      <view class="activity-info box" :key="index" v-for="act, index in activity">
-        <image class="activity-img" :src="config.baseUrl + act.url" mode="widthFix" />
-      </view>
-    </view>
-    <no-more text="Hutu-order" />
+    <view class="footer-mark">本地交互原型 · 数据仅作展示</view>
   </view>
 </template>
 
-<script setup>
-import { ref, reactive, onMounted, defineProps, defineEmits, watch, computed } from 'vue'
-import NoMore from '@/component/NoMore.vue'
-import { config } from '@/config/index'
-import { commonNavigate } from '@/utils/CommonUtils'
-import { onLoad } from '@dcloudio/uni-app'
-import { myAPI } from './api'
-// Data
-const userInfo = ref('')
-const featureBtns = ref([])
-const activity = ref([])
-const isExpanded = ref(false)
-
-
-// 积分相关数据
-const progressPercentage = computed(() => {
-  if (userInfo.value && !userInfo.isTourist) {
-    return Math.round(userInfo.value.ponit / (userInfo.value.ponit + userInfo.value.nextLevelNeed) * 100)
-  } else {
-    return 0
-  }
-})
-
-const visibleFeatures = computed(() => {
-  if (isExpanded.value) {
-    return featureBtns.value
-  } else {
-    return featureBtns.value.slice(0, 4)
-  }
-})
-
-const feature = [
-  {
-    title: '设置',
-    icon: 'settings',
-    navigation: '/pages/setting/index',
-    color: '#8B7355'
-  },
-  {
-    title: '我的订单',
-    icon: 'chatbubble',
-    navigation: '/pages/my-order/index',
-    color: '#8B7355',
-    authority: true
-  },
-  {
-    title: '我的收藏',
-    icon: 'heart',
-    navigation: '/pages/order/index',
-    color: '#8B7355',
-    authority: true
-  },
-  {
-    title: '我的会员',
-    icon: 'vip',
-    navigation: '/pages/order/index',
-    color: '#8B7355',
-    authority: true
-  },
-  {
-    title: '我的钱包',
-    icon: 'wallet',
-    navigation: '/pages/order/index',
-    color: '#8B7355',
-    authority: true
-  },
-  {
-    title: '赞赏作者',
-    icon: 'hand-up',
-    navigation: '/pages/order/index',
-    color: '#8B7355'
-  },
-  {
-    title: '关于我们',
-    icon: 'info',
-    navigation: '/pages/order/index',
-    color: '#8B7355'
-  },
-  {
-    title: '购买版权',
-    icon: 'checkmarkempty',
-    navigation: '/pages/order/index',
-    color: '#8B7355'
-  },
-  {
-    title: '收藏项目',
-    icon: 'star',
-    navigation: '/pages/order/index',
-    color: '#8B7355'
-  }
-]
-// Emits
-const emit = defineEmits([
-])
-
-// Props
-const props = defineProps({
-
-})
-
-// Lifecycle hooks
-onMounted(() => {
-  getUserInfo()
-  getActivity()
-  getFeature()
-})
-
-onLoad(()=> {
-  
-})
-
-// Methods
-const handleLogin = () => {
-  if (!userInfo.value || userInfo.value.isTourist) {
-    commonNavigate('/pages/authority/index?to=/pages/my/index')
-  }
-}
-
-const getUserInfo = () => {
-  userInfo.value = uni.getStorageSync('USER_INFO')
-  console.log(userInfo.value);
-
-}
-
-const getActivity = async() => {
-  myAPI.getPlayImage(3).then(res => { 
-    activity.value = res.data
-  })
-}
-
-const getFeature = async() => {
-  myAPI.queryFeatureBtns().then(res => {
-    featureBtns.value = res.data
-  })
-}
-
-const toggleExpand = () => {
-  isExpanded.value = !isExpanded.value
-}
-// Watchers
-
-</script>
-
 <style scoped lang="scss">
-.body {
-  min-height: 100vh;
-  background-color: #f5f5f5;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-
-.box {
-  padding: 20rpx;
-  box-sizing: border-box;
-}
-
-.top-info {
-  background-image: url('http://localhost:10220/static/back.jpeg');
-  background-repeat: no-repeat;
-  background-size: cover;
-  background-position: center;
-  border-radius: 10rpx;
-  height: 30vh;
-  /* 占据父容器高度的30% */
-  width: 100%;
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-}
-
-/* 积分卡片样式 */
-.integral-card {
-  position: relative;
-  z-index: 10;
-  margin-top: -8vh;
-  /* 向上移动，实现重叠效果 */
-  // padding: 0 30rpx;
-
-  .card-content {
-    background: linear-gradient(135deg, #1c308b 0%, #764ba2 100%);
-    border-radius: 20rpx;
-    padding: 40rpx 30rpx;
-    box-shadow: 0 10rpx 30rpx rgba(102, 126, 234, 0.3);
-    height: 10vh;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-
-  .integral-info {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-
-    .integral-label {
-      font-size: 34rpx;
-      color: rgba(255, 255, 255, 0.8);
-      font-weight: 400;
-    }
-
-    .integral-value {
-      font-size: 30rpx;
-      color: white;
-      font-weight: bold;
-      text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.2);
-    }
-  }
-
-  .progress-section {
-    .progress-bar {
-      width: 100%;
-      height: 16rpx;
-      background: rgba(255, 255, 255, 0.3);
-      border-radius: 10rpx;
-      overflow: hidden;
-      margin-bottom: 15rpx;
-
-      .progress-fill {
-        height: 100%;
-        background: linear-gradient(90deg, #ffffff, #c7c0f0);
-        border-radius: 10rpx;
-        transition: width 0.5s ease;
-        box-shadow: 0 0 10rpx rgba(255, 215, 0, 0.5);
-      }
-    }
-
-    .progress-text {
-      text-align: left;
-
-      text {
-        font-size: 24rpx;
-        color: rgba(255, 255, 255, 0.8);
-      }
-    }
-  }
-}
-
-.feature-expand-btn {
-  width: 100%;
-  text-align: center;
-  padding: 10rpx;
-}
-
-.info-box {
-  display: flex;
-  align-items: center;
-
-  .avatar {
-    width: 120rpx;
-    height: 120rpx;
-    border-radius: 50%;
-    background-color: white;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
-    border: 4rpx solid rgba(255, 255, 255, 0.8);
-    box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
-
-    .avatar-img {
-      width: 100%;
-      height: 100%;
-      border-radius: 50%;
-    }
-  }
-
-  .user-name {
-    font-size: 36rpx;
-    font-weight: bold;
-    margin-left: 30rpx;
-    color: white;
-    text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.3);
-  }
-}
-
-.feature-list {
-  width: 100%;
-  background-color: white;
-  border-radius: 20rpx;
-  margin-top: 20rpx;
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.05);
-  display: flex;
-  flex-wrap: wrap;
-
-  .feature-item {
-    width: 25%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 24rpx 0;
-
-    .feature-icon {
-      width: 80rpx;
-      height: 80rpx;
-      border-radius: 50%;
-      background-color: #f8f8f8;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 15rpx;
-
-      icon {
-        color: #ff6b35;
-      }
-    }
-
-    .feature-title {
-      font-size: 24rpx;
-      color: #333;
-      text-align: center;
-    }
-  }
-}
-
-.activity-info {
-  background-color: rgba(0, 0, 0, 0);
-}
-
-.activity-img {
-  width: 100%;
-  border-radius: 10px;
-  // max-height: 200rpx;
-}
+.my-page{padding-bottom:60rpx}.profile-hero{padding:calc(54rpx + env(safe-area-inset-top)) 30rpx 74rpx;color:white;background:linear-gradient(145deg,#302019,#6e4c3a)}.brand-line{display:flex;align-items:center;justify-content:space-between;color:var(--caramel-300);font-size:18rpx;letter-spacing:5rpx}.brand-line button{width:auto;height:52rpx;padding:0 20rpx;display:flex;align-items:center;justify-content:center;border:1rpx solid rgba(255,255,255,.25);border-radius:26rpx;background:transparent;color:white;font-size:19rpx;letter-spacing:1rpx}.profile-row{display:flex;align-items:center;margin-top:34rpx}.avatar{width:104rpx;height:104rpx;display:flex;align-items:center;justify-content:center;border:2rpx solid rgba(255,255,255,.45);border-radius:36rpx;background:#d4ad7e;color:#4a3025;font-size:43rpx;font-weight:850}.profile-main{flex:1;margin-left:22rpx}.user-name,.user-title,.points text{display:block}.user-name{font-size:38rpx;font-weight:800}.user-title{margin-top:7rpx;color:rgba(255,255,255,.64);font-size:21rpx}.points{text-align:right}.points text:first-child{font-size:38rpx;font-weight:800}.points text:last-child{margin-top:3rpx;font-size:19rpx;color:rgba(255,255,255,.6)}.level-bar{height:8rpx;margin-top:30rpx;overflow:hidden;border-radius:8rpx;background:rgba(255,255,255,.15)}.level-bar view{height:100%;border-radius:8rpx;background:linear-gradient(90deg,#c99457,#f0d7b2)}.level-copy{display:block;margin-top:10rpx;text-align:right;font-size:18rpx;color:rgba(255,255,255,.55)}.quick-panel{display:grid;grid-template-columns:repeat(4,1fr);margin:-38rpx 28rpx 0;padding:24rpx 8rpx;position:relative}.quick-item{position:relative;text-align:center;font-size:20rpx;color:var(--muted)}.quick-item:not(:last-child)::after{content:'';position:absolute;right:0;top:10rpx;bottom:10rpx;width:1rpx;background:var(--line)}.quick-item text{display:block}.quick-number{margin-bottom:8rpx;color:var(--coffee-900);font-size:31rpx;font-weight:800}.active-order{display:flex;align-items:center;gap:16rpx;padding:23rpx}.active-symbol{width:64rpx;height:64rpx;display:flex;align-items:center;justify-content:center;border-radius:18rpx;background:#e4eee4;color:var(--green);font-size:19rpx;font-weight:700}.active-main{flex:1}.active-main text{display:block}.active-main text:first-child{font-size:25rpx;font-weight:700}.active-main text:last-child{margin-top:6rpx;color:var(--muted);font-size:20rpx}.arrow{color:var(--coffee-600);font-size:38rpx}.services{display:grid;grid-template-columns:1fr 1fr;padding:8rpx 24rpx}.service-item{display:flex;flex-direction:column;align-items:flex-start;gap:7rpx;padding:24rpx 10rpx;border-bottom:1rpx solid var(--line);color:var(--ink)}.service-item:nth-last-child(-n+2){border-bottom:0}.service-item text:first-child{font-size:24rpx;font-weight:700}.service-item text:last-child{color:var(--muted);font-size:18rpx}.favorite-list{display:flex;flex-direction:column;gap:14rpx}.empty-favorite{padding:40rpx;text-align:center;color:var(--muted);font-size:22rpx}.footer-mark{padding:62rpx 20rpx 20rpx;text-align:center;color:#b3a89f;font-size:18rpx}
 </style>

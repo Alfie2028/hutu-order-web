@@ -1,537 +1,145 @@
+<script setup>
+import { computed, ref } from 'vue'
+import { CAMPUS, STORES } from '@/data/catalog'
+import { useAppStore } from '@/store/app'
+import { formatDistance } from '@/utils/format'
+
+const keyword = ref('')
+const latitude = ref(CAMPUS.latitude)
+const longitude = ref(CAMPUS.longitude)
+const { state, currentStore, setStore } = useAppStore()
+
+const osmMapUrl = computed(() => {
+  const lat = Number(latitude.value)
+  const lng = Number(longitude.value)
+  const south = (lat - 0.008).toFixed(6)
+  const west = (lng - 0.013).toFixed(6)
+  const north = (lat + 0.008).toFixed(6)
+  const east = (lng + 0.013).toFixed(6)
+  const bbox = `${west},${south},${east},${north}`
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat}%2C${lng}`
+})
+
+const filteredStores = computed(() => {
+  const key = keyword.value.trim()
+  return key ? STORES.filter((store) => `${store.name}${store.address}`.includes(key)) : STORES
+})
+
+const markers = computed(() => [
+  {
+    id: 0,
+    latitude: CAMPUS.latitude,
+    longitude: CAMPUS.longitude,
+    title: CAMPUS.name,
+    iconPath: '/static/icon/my-location.png',
+    width: 32,
+    height: 32,
+    callout: { content: `${CAMPUS.name}\n${CAMPUS.campus}`, display: 'ALWAYS', padding: 8, borderRadius: 6, color: '#35231b', bgColor: '#ffffff' },
+  },
+  ...STORES.map((store, index) => ({
+    id: index + 1,
+    latitude: store.latitude,
+    longitude: store.longitude,
+    title: store.name,
+    iconPath: store.id === state.currentStoreId ? '/static/icon/shop-location-selected.png' : '/static/icon/shop-location.png',
+    width: store.id === state.currentStoreId ? 32 : 27,
+    height: store.id === state.currentStoreId ? 32 : 27,
+    callout: { content: store.name, display: store.id === state.currentStoreId ? 'ALWAYS' : 'BYCLICK', padding: 7, borderRadius: 5, color: '#35231b', bgColor: '#ffffff' },
+  })),
+])
+
+function select(store) {
+  const apply = () => {
+    setStore(store.id)
+    latitude.value = store.latitude
+    longitude.value = store.longitude
+  }
+  if (state.cart.length && state.currentStoreId !== store.id) {
+    uni.showModal({ title: '切换门店', content: '切换门店将清空当前购物袋，是否继续？', success: ({ confirm }) => confirm && apply() })
+  } else apply()
+}
+
+function handleMarkerTap(event) {
+  const markerId = Number(event.detail?.markerId ?? event.markerId)
+  if (markerId === 0) return recenterCampus()
+  const store = STORES[markerId - 1]
+  if (store) select(store)
+}
+
+function recenterCampus() {
+  latitude.value = CAMPUS.latitude
+  longitude.value = CAMPUS.longitude
+}
+
+function goOrder() { uni.switchTab({ url: '/pages/order/index' }) }
+</script>
+
 <template>
-  <view class="body">
-    <view class="map-container">
-      <map class="map-box" :class="{ 'map-box-expanded': isExpanded }" :longitude="longitude" :latitude="latitude"
-        :markers="markers" :scale="config.scale" :theme="config.theme" @markertap="centerToShop"
-        v-if="locationLoaded" />
-    </view>
-    <view class="location-button" :class="{ 'location-button-expanded': isExpanded }" @click="relocal()">
-      <image src="@/static/icon/local.png" class="location-icon" />
-    </view>
-    <view class="shop-info" :class="{ 'shop-info-expanded': isExpanded }" @touchstart="handleTouchStart"
-      @touchmove="handleTouchMove">
-      <view class="drag-handle">
-        <view class="drag-bar"></view>
+  <view class="page-shell shop-page">
+    <view class="map-wrap">
+      <!-- #ifdef H5 -->
+      <iframe
+        class="map-box osm-frame"
+        :src="osmMapUrl"
+        title="河南农业大学软件学院周边地图"
+        loading="eager"
+        referrerpolicy="no-referrer-when-downgrade"
+      ></iframe>
+      <!-- #endif -->
+      <!-- #ifndef H5 -->
+      <map
+        class="map-box"
+        :latitude="latitude"
+        :longitude="longitude"
+        :markers="markers"
+        :scale="15"
+        show-location
+        @markertap="handleMarkerTap"
+      />
+      <!-- #endif -->
+      <view class="map-caption card">
+        <text class="caption-label">学院周边</text>
+        <text class="caption-title">{{ CAMPUS.name }}</text>
+        <text class="caption-copy">{{ CAMPUS.campus }} · 已定位附近门店</text>
       </view>
-      <!-- 搜索框 -->
-      <view class="search-box">
-        <view class="search-input">
-          <input type="text" confirm-type="搜索" placeholder="搜索门店" v-model="searchParam.shopName" class="search-input-field">
-          <view class="search-icon" @click="getShopInfo()">搜索</view>
-        </view>
+      <button class="recenter-button" aria-label="回到学院位置" @click="recenterCampus">
+        <image src="/static/icon/local.png" mode="aspectFit" />
+      </button>
+    </view>
+
+    <view class="shop-content">
+      <view class="sheet-handle" />
+      <view class="sheet-heading">
+        <view><text class="sheet-kicker">STORE PICKUP</text><text class="sheet-title">选择取餐门店</text></view>
+        <view class="service-status"><text class="status-dot"></text><text>营业中</text></view>
       </view>
-      <view class="shop-list">
-        <view class="shop-info-item" v-for="(shop, index) in shopInfos" :key="index" @click="selectShop(shop)"
-          :class="{ 'shop-info-item--active': selectedShopId === shop.id }">
-          <view class="shop-info-item-info">
-            <view class="shop-info-item-header">
-              <view class="shop-info-item-info-name">{{ shop.shopName }}</view>
-              <view class="shop-confirm" @click="goToOrder(shop)">
-                去下单
-              </view>
-            </view>
-            <view class="shop-info-item-header">
-              <view class="shop-info-item-info-address">{{ shop.address }}</view>
-              <view class="shop-distance" v-if="shop.distance">{{ formatDistance(shop.distance) }}</view>
-            </view>
+      <view class="search-box"><text class="search-symbol">⌕</text><input v-model="keyword" placeholder="搜索门店名称或地址" confirm-type="search" /><text v-if="keyword" class="clear" @click="keyword = ''">×</text></view>
+      <view class="result-title"><text>附近门店</text><text class="result-count">{{ filteredStores.length }} 家</text></view>
+      <scroll-view scroll-y class="store-list">
+        <view v-for="store in filteredStores" :key="store.id" class="store-item card" :class="{ selected: store.id === state.currentStoreId }" @click="select(store)">
+          <view class="store-main">
+            <view class="store-row"><text class="store-name">{{ store.name }}</text><text class="store-distance">{{ formatDistance(store.distance) }}</text></view>
+            <text class="store-address">{{ store.address }}</text>
+            <view class="store-meta"><text :class="store.status">{{ store.status === 'open' ? '营业中' : '客流较多' }}</text><text>{{ store.openTime }}–{{ store.closeTime }}</text><text>约 {{ store.waitMinutes }} 分钟</text></view>
+            <view class="service-row"><text v-for="service in store.services" :key="service" class="chip">{{ service }}</text></view>
           </view>
+          <text v-if="store.id === state.currentStoreId" class="selected-mark">已选择</text>
         </view>
-        <no-more/>
-      </view>
+      </scroll-view>
+      <button class="primary-button confirm-button" @click="goOrder">在 {{ currentStore.shortName }} 点单</button>
     </view>
   </view>
 </template>
 
-<script setup>
-import { ref, onMounted, defineProps, defineEmits, watch, onBeforeMount, computed, nextTick } from 'vue'
-import { HomeAPI } from '@/pages/home/api'
-import { onShow } from '@dcloudio/uni-app'
-import { staticLatAndLongitude } from '@/mock'
-import { commonNavigate, formatDistance, calculateDistance } from '@/utils/CommonUtils'
-import noMore from '@/component/NoMore.vue'
-
-// Data
-const shopInfos = ref([])
-const config = ref({
-  scale: 17,
-  theme: 'normal'
-})
-const longitude = ref(0)
-const latitude = ref(0)
-const locationLoaded = ref(false)
-const isExpanded = ref(false)
-const startY = ref(0)
-const currentY = ref(0)
-const markers = ref([])
-const searchParam = ref({})
-const emptySearchParam = { }
-const selectedShopId = ref(null)
-
-watch(isExpanded, (newValue) => {
-  locationLoaded.value = false
-  nextTick(() => {
-    locationLoaded.value = true
-  })
-})
-
-// Emits
-const emit = defineEmits([
-
-])
-
-// Props
-const props = defineProps({
-
-})
-
-onBeforeMount(() => {
-})
-
-// Lifecycle hooks
-onMounted(() => {
-
-})
-
-onShow(() => {
-  getUserLocal()
-})
-
-
-// Methods
-const getShopInfo = () => {
-  shopInfos.value = []
-  HomeAPI.queryShopInfo(searchParam.value).then(res => {
-    shopInfos.value = res.data
-    if (shopInfos.value.length > 0) {
-      shopInfos.value.forEach(shop => {
-        shop.distance = calculateDistance(latitude.value, longitude.value, shop.latitude, shop.longitude)
-      })
-      shopInfos.value.sort((a, b) => a.distance - b.distance)
-    }
-    selectedShopId.value = null
-    generateMarkers()
-  })
-}
-
-const relocal = () => {
-  getUserLocal(false)
-}
-
-const getUserLocal = (queryShop = true) => {
-  selectedShopId.value = null
-  uni.getLocation({
-    type: 'gcj02',
-    success: (res) => {
-      console.log('getLocal:' + JSON.stringify(res));
-      longitude.value = res.longitude
-      latitude.value = res.latitude
-      if (queryShop) {
-        getShopInfo()
-      } else {
-        generateMarkers()
-      }
-    },
-    fail: (error) => {
-      longitude.value = staticLatAndLongitude[1]
-      latitude.value = staticLatAndLongitude[0]
-      if (queryShop) {
-        getShopInfo()
-      } else {
-        generateMarkers()
-      }
-    }
-  })
-}
-
-const generateMarkers = () => {
-  locationLoaded.value = false
-  if (!longitude.value || !latitude.value || shopInfos.value.length === 0) {
-    nextTick(() => {
-      locationLoaded.value = true
-    })
-    return
-  }
-
-  const userMarker = {
-    id: 0,
-    latitude: latitude.value,
-    longitude: longitude.value,
-    title: selectedShopId.value === null ? '我的位置' : '选中门店',
-    iconPath: selectedShopId.value === null ? '../../static/icon/my-location.png' : '../../static/icon/shop-location-selected.png',
-    width: 30,
-    height: 30,
-    callout: {
-      content: selectedShopId.value === null ? '我的位置' : '选中门店',
-      color: '#ffffff',
-      bgColor: '#8B7355',
-      padding: 5,
-      borderRadius: 3,
-      display: ''
-    }
-  }
-
-  const shopMarkers = shopInfos.value.map((shop, index) => {
-    return {
-      id: index + 1,
-      latitude: shop.latitude,
-      longitude: shop.longitude,
-      title: shop.shopName,
-      iconPath: '../../static/icon/shop-location.png',
-      width: 25,
-      height: 25,
-      callout: {
-        content: `${shop.shopName}\n${shop.address}`,
-        color: '#333333',
-        bgColor: '#ffffff',
-        padding: 10,
-        borderRadius: 5,
-        borderWidth: 1,
-        borderColor: '#eeeeee'
-      }
-    }
-  }).filter(shop => shop.latitude != latitude.value && shop.longitude != longitude.value)
-  nextTick(() => {
-    locationLoaded.value = true
-  })
-  markers.value = [userMarker, ...shopMarkers]
-}
-
-const selectShop = (shop) => {
-  // 设置选中状态
-  selectedShopId.value = shop.id
-  console.log('selectShop:', selectedShopId.value);
-
-  centerToShop(shop)
-}
-
-// 点击门店
-const centerToShop = (shop) => {
-  if (shop && shop.latitude && shop.longitude) {
-    longitude.value = shop.longitude
-    latitude.value = shop.latitude
-    generateMarkers()
-  }
-}
-
-// 拖拽相关方法
-const handleTouchStart = (e) => {
-  startY.value = e.touches[0].clientY
-  currentY.value = e.touches[0].clientY
-}
-
-const handleTouchMove = (e) => {
-  e.preventDefault()
-  currentY.value = e.touches[0].clientY
-  const deltaY = startY.value - currentY.value
-
-  // 向上滑动（展开）
-  if (deltaY > 50) {
-    isExpanded.value = true
-  }
-  // 向下滑动（收起）
-  else if (deltaY < -50) {
-    isExpanded.value = false
-  }
-}
-
-const goToOrder = (shop) => {
-  uni.setStorageSync('CURRENT_SHOP', shop)
-  uni.reLaunch({
-    url: '/pages/order/index'
-  })
-}
-// Watchers
-
-</script>
-
 <style scoped lang="scss">
-.body {
-  position: relative;
-  width: 100%;
-  height: 100vh;
-  overflow: hidden;
-}
-
-.map-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-}
-
-.map-box {
-  width: 100%;
-  height: 60%;
-
-  .map-box-expanded {
-    height: 30%;
-  }
-}
-
-.shop-info {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: white;
-  border-radius: 20rpx 20rpx 0 0;
-  z-index: 2;
-  height: 40%;
-  min-height: 40%;
-  max-height: 60%;
-  transition: height 0.3s ease;
-  box-shadow: 0 -2rpx 20rpx rgba(0, 0, 0, 0.1);
-  display: flex;
-  flex-direction: column;
-
-  &.shop-info-expanded {
-    height: 60%;
-  }
-}
-
-.drag-handle {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 20rpx 0;
-  touch-action: none;
-}
-
-.drag-bar {
-  width: 60rpx;
-  height: 6rpx;
-  background: #e0e0e0;
-  border-radius: 3rpx;
-}
-
-.shop-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 20rpx 20rpx 20rpx;
-
-  /* 滚动条样式 */
-  &::-webkit-scrollbar {
-    width: 4rpx;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 2rpx;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 2rpx;
-  }
-
-  &::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8;
-  }
-}
-
-.shop-info-item {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  padding: 30rpx 20rpx;
-  border-bottom: 1rpx solid #f0f0f0;
-  border-radius: 16rpx;
-  margin: 10rpx 0;
-  transition: all 0.2s ease;
-  border: 2rpx solid transparent;
-
-  &:last-child {
-    border-bottom: none;
-  }
-
-  &:active {
-    background-color: #f8f8f8;
-  }
-
-  &.shop-info-item--active {
-    background-color: #f8f4f0;
-    border-color: #8B7355;
-    box-shadow: 0 4rpx 12rpx rgba(139, 115, 85, 0.15);
-
-    .shop-info-item-info-name {
-      color: #8B7355;
-    }
-
-    .shop-info-item-info-address {
-      color: #666;
-    }
-
-    .shop-distance {
-      background: #8B7355;
-      color: white;
-    }
-  }
-}
-
-.shop-confirm{
-  font-size: 13px;
-  padding: 0 16rpx;
-  font-weight: 600;
-  // color: #8B7355;
-}
-
-.shop-info-item-info {
-  flex: 1;
-
-  .shop-info-item-info-name {
-    font-size: 32rpx;
-    font-weight: 600;
-    color: #333;
-    flex: 1;
-    transition: color 0.2s ease;
-  }
-
-  .shop-info-item-info-address {
-    font-size: 26rpx;
-    color: #666;
-    line-height: 1.4;
-    transition: color 0.2s ease;
-  }
-}
-
-.search-box {
-  padding: 0 20rpx 20rpx 20rpx;
-}
-
-.search-input {
-  position: relative;
-  display: flex;
-  align-items: center;
-
-  .search-input-field {
-    flex: 1;
-    height: 80rpx;
-    background: #f5f5f5;
-    border-radius: 40rpx;
-    padding: 0 80rpx 0 30rpx;
-    font-size: 28rpx;
-    border: none;
-    outline: none;
-
-    &::placeholder {
-      color: #999;
-    }
-
-    &:focus {
-    border: 2rpx solid #8B7355;
-  }
-  }
-
-  .search-icon {
-    position: absolute;
-    right: 30rpx;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 32rpx;
-    color: #666;
-  }
-}
-
-.shop-info-item-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 10rpx;
-}
-
-.shop-distance {
-  font-size: 24rpx;
-  color: #8B7355;
-  background: #f8f4f0;
-  border: 1rpx solid #e8d5c4;
-  padding: 8rpx 16rpx;
-  border-radius: 20rpx;
-  white-space: nowrap;
-  margin-left: 20rpx;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-// 适配不同屏幕
-@media screen and (min-height: 1000px) {
-  .shop-info {
-    min-height: 25%;
-    max-height: 50%;
-
-    &.shop-info-expanded {
-      height: 50%;
-    }
-  }
-
-  .location-button {
-    top: 52%;
-
-    &.location-button-expanded {
-      top: 40%
-    }
-  }
-}
-
-@media screen and (max-height: 600px) {
-  .shop-info {
-    min-height: 35%;
-    max-height: 65%;
-
-    &.shop-info-expanded {
-      height: 65%;
-    }
-  }
-
-  .location-button {
-    top: 54%;
-
-    &.location-button-expanded {
-      top: 28%
-    }
-  }
-}
-
-.location-button {
-  position: absolute;
-  top: 54%;
-  right: 4%;
-  width: 60rpx;
-  height: 60rpx;
-  border-radius: 50%;
-  background: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4rpx 16rpx rgba(139, 115, 85, 0.2);
-  z-index: 3;
-  transition: all 0.2s ease;
-  border: 2rpx solid #f8f4f0;
-
-  &:active {
-    background: #f8f4f0;
-    border-color: #e8d5c4;
-  }
-
-  &.location-button-expanded {
-    top: 34%
-  }
-}
-
-.location-icon {
-  width: 32rpx;
-  height: 32rpx;
-  filter: invert(39%) sepia(12%) saturate(978%) hue-rotate(351deg) brightness(94%) contrast(89%);
-}
-
-// 选中状态下的定位按钮样式
-.shop-info-item--active .location-button {
-  background: #8B7355;
-
-  .location-icon {
-    filter: brightness(0) invert(1);
-  }
-}
-
+.shop-page{height:100vh;overflow:hidden;padding:0;background:var(--oat-50)}
+.map-wrap{position:relative;height:45vh;min-height:430rpx;overflow:hidden;background:#dfe7df}.map-box{width:100%;height:100%}.osm-frame{display:block;border:0;background:#e8ece6}
+.map-caption{position:absolute;z-index:2;left:24rpx;top:24rpx;max-width:430rpx;padding:17rpx 21rpx;border-color:rgba(255,255,255,.8);border-radius:20rpx;background:rgba(255,255,255,.92);box-shadow:0 8rpx 28rpx rgba(22,55,43,.12);backdrop-filter:blur(10rpx)}.map-caption text{display:block}.caption-label{color:var(--brand);font-size:17rpx;font-weight:750;letter-spacing:2rpx}.caption-title{margin-top:5rpx;font-size:24rpx;font-weight:750}.caption-copy{margin-top:5rpx;color:var(--muted);font-size:18rpx}
+.recenter-button{position:absolute;z-index:3;right:24rpx;bottom:32rpx;width:68rpx;height:68rpx;padding:0;display:flex;align-items:center;justify-content:center;border:1rpx solid rgba(26,75,58,.1);border-radius:50%;background:#fff;box-shadow:0 8rpx 24rpx rgba(22,55,43,.17)}.recenter-button image{width:32rpx;height:32rpx}
+.shop-content{position:relative;z-index:4;height:calc(55vh + 26rpx);margin-top:-26rpx;padding:12rpx 28rpx 170rpx;border-radius:32rpx 32rpx 0 0;background:var(--oat-50);box-shadow:0 -10rpx 35rpx rgba(34,48,42,.08)}.sheet-handle{width:68rpx;height:7rpx;margin:0 auto 16rpx;border-radius:5rpx;background:#d6d2ca}.sheet-heading{display:flex;align-items:center;justify-content:space-between;margin:0 2rpx 19rpx}.sheet-heading text{display:block}.sheet-kicker{color:var(--brand);font-size:16rpx;font-weight:750;letter-spacing:3rpx}.sheet-title{margin-top:3rpx;font-size:31rpx;font-weight:780}.service-status{display:flex;align-items:center;gap:8rpx;padding:10rpx 15rpx;border-radius:24rpx;color:var(--brand);background:var(--brand-soft);font-size:19rpx;font-weight:650}.status-dot{width:10rpx;height:10rpx;border-radius:50%;background:var(--brand)}
+.search-box{display:flex;align-items:center;gap:14rpx;height:76rpx;padding:0 23rpx;border:1rpx solid var(--line);border-radius:22rpx;background:#fff;box-shadow:0 6rpx 20rpx rgba(36,50,44,.04)}.search-box input{flex:1;font-size:23rpx}.search-symbol{font-size:24rpx;color:var(--brand)}.clear{font-size:34rpx;color:var(--muted)}
+.result-title{display:flex;justify-content:space-between;margin:24rpx 2rpx 14rpx;font-size:27rpx;font-weight:750}.result-count{color:var(--muted);font-size:20rpx;font-weight:400}.store-list{height:calc(55vh - 320rpx)}
+.store-item{position:relative;display:flex;margin-bottom:14rpx;padding:22rpx;border-radius:22rpx;box-shadow:0 7rpx 22rpx rgba(36,50,44,.045)}.store-item.selected{border:1rpx solid rgba(26,75,58,.3);background:linear-gradient(135deg,#fff 60%,#f0f6f1)}.store-main{min-width:0;flex:1}.store-row{display:flex;justify-content:space-between;gap:12rpx}.store-name{font-size:27rpx;font-weight:760}.store-distance{color:var(--brand);font-size:21rpx;font-weight:650}.store-address{display:block;margin-top:8rpx;color:var(--muted);font-size:20rpx}.store-meta{display:flex;gap:15rpx;margin-top:12rpx;color:var(--muted);font-size:18rpx}.store-meta .open{color:var(--brand);font-weight:700}.store-meta .busy{color:var(--danger);font-weight:700}.service-row{display:flex;gap:8rpx;margin-top:14rpx}.service-row .chip{min-height:36rpx;padding:0 12rpx;color:#56675e;background:#f1f4ef;font-size:17rpx}.selected-mark{position:absolute;right:20rpx;bottom:20rpx;color:var(--brand);font-size:19rpx;font-weight:750}
+.confirm-button{position:fixed;z-index:10;left:28rpx;right:28rpx;bottom:calc(116rpx + env(safe-area-inset-bottom))}
+@media screen and (min-width:760px){.confirm-button{left:50%;right:auto;width:694px;transform:translateX(-50%)}}
 </style>

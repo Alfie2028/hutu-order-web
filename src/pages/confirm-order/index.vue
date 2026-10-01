@@ -1,435 +1,115 @@
-<template>
-  <view class="body">
-    <shop-card class="shop-card box" :pickUpType="pickUpType" @changePickUpType="changePickUpType" />
-    <view class="content box">
-      <scroll-view class="scroll-content" scroll-y="true">
-        <view class="cart-list">
-          <view :key="item.id" v-for="(item) in itemInfo" class="cart-detail-item">
-            <view class="cart-detail-item-content">
-              <view class="cart-detail-item-content-left">
-                <image :src="config.baseUrl + item.cover || '/static/image/default-coffee.png'" mode="aspectFill"
-                  class="item-image" />
-              </view>
-              <view class="cart-detail-item-content-right">
-                <view class="cart-detail-item-content-right-header">
-                  <view class="title">{{ item.name }}</view>
-                  <view class="price">¥ {{ item.price }}</view>
-                </view>
-                <view class="cart-detail-item-content-right-body">
-                  <view class="sku">
-                    {{ getSkuStr(item) }}
-                  </view>
-                </view>
-                <view class="cart-detail-item-content-right-footer">
-                  <view class="count">×{{ item.count }}</view>
-                </view>
-              </view>
-            </view>
-          </view>
-        </view>
+<script setup>
+import { computed, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import { COUPONS } from '@/data/catalog'
+import { useAppStore } from '@/store/app'
+import { formatMoney } from '@/utils/format'
 
-        <view class="feature-section">
-          <feature-item title="优惠券" leftIcon="vip-filled" :active="!selectedCopuon"
-            :activePlaceholder="selectedCopuon ? '' : '选择优惠券'" @toggle="toggleCoupon" />
-          <feature-item title="备注" leftIcon="chat" :activePlaceholder="remark ? '' : '填写备注'" @toggle="toggleRemark" />
-          <view v-if="orderType === OrderType.SCHEDULE" class="feature-item" @click="toggleExpectArrivalTime">
-            <view class="feature-left">
-              <uni-icons type="chat" color="#8B7355" size="20" />
-              <text class="feature-title">预计到店</text>
-            </view>
-            <view class="feature-right">
-              <text class="feature-value">
-                {{ expectArrivalTime }}
-              </text>
-              <uni-icons type="right" color="#999" size="18" />
-            </view>
-          </view>
-        </view>
-      </scroll-view>
+const store = useAppStore()
+const pickupTime = ref('尽快取餐')
+const remark = ref('')
+const couponId = ref('')
+const payment = ref('wechat')
+const paying = ref(false)
+
+onShow(() => { if (!store.state.cart.length) uni.showToast({ title: '购物袋还是空的', icon: 'none' }) })
+
+const availableCoupons = computed(() => COUPONS.filter((coupon) => store.state.couponIds.includes(coupon.id) && store.cartSubtotal.value >= coupon.thresholdCents))
+const chosenCoupon = computed(() => COUPONS.find((coupon) => coupon.id === couponId.value))
+const discount = computed(() => chosenCoupon.value?.discountCents || 0)
+const total = computed(() => Math.max(0, store.cartSubtotal.value - discount.value))
+
+function submit() {
+  if (!store.state.cart.length || paying.value) return
+  paying.value = true
+  uni.showLoading({ title: '模拟支付中' })
+  setTimeout(() => {
+    uni.hideLoading()
+    const order = store.createOrder({ couponId: couponId.value, remark: remark.value.trim(), pickupTime: pickupTime.value })
+    paying.value = false
+    if (order) uni.redirectTo({ url: `/pages/settled/index?id=${order.id}` })
+  }, 650)
+}
+</script>
+
+<template>
+  <view class="page-shell checkout-page">
+    <view class="checkout-header">
+      <button class="top-back" @click="uni.navigateBack()">‹</button>
+      <text class="eyebrow">ORDER REVIEW</text><text class="header-title">确认订单</text><text class="header-subtitle">核对好口味，到店直接取</text>
     </view>
 
-    <view class="footer">
-      <view class="footer-content">
-        <view class="total-info">
-          <text class="total-label">合计：</text>
-          <text class="total-price">¥ {{ totalPrice }}</text>
-        </view>
-        <view class="pay-btn" @click="handlePay">去支付</view>
+    <view class="section first-section">
+      <view class="store-card card">
+        <view class="store-icon">店</view>
+        <view class="store-main"><text class="store-name">{{ store.currentStore.value.name }}</text><text class="store-address">{{ store.currentStore.value.address }}</text></view>
+        <text class="store-time">约 {{ store.currentStore.value.waitMinutes }} 分钟</text>
       </view>
+    </view>
+
+    <view class="section">
+      <view class="section-heading"><text class="section-title">取餐方式</text></view>
+      <view class="mode-switch card">
+        <button :class="{ active: store.state.orderMode === 'pickup' }" @click="store.setOrderMode('pickup')">到店自取</button>
+        <button :class="{ active: store.state.orderMode === 'dineIn' }" @click="store.setOrderMode('dineIn')">门店堂食</button>
+      </view>
+      <view class="time-row">
+        <button v-for="time in ['尽快取餐','15 分钟后','30 分钟后']" :key="time" class="time-chip" :class="{ active: pickupTime === time }" @click="pickupTime = time">{{ time }}</button>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-heading"><text class="section-title">商品清单</text><text class="section-link">共 {{ store.cartCount.value }} 件</text></view>
+      <view class="items card">
+        <view v-for="item in store.state.cart" :key="item.key" class="item-row">
+          <image class="item-fallback" :src="item.image" mode="aspectFill" />
+          <view class="item-info"><text class="item-name">{{ item.name }}</text><text class="item-options">{{ item.selectedOptions.map(option => option.name).join(' · ') || '标准制作' }}</text></view>
+          <view class="item-price"><text>{{ formatMoney(item.unitPriceCents) }}</text><text>× {{ item.quantity }}</text></view>
+        </view>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-heading"><text class="section-title">优惠与备注</text></view>
+      <view class="form-card card">
+        <view class="form-row coupon-row">
+          <text>优惠券</text>
+          <scroll-view scroll-x class="coupon-scroll">
+            <button class="coupon" :class="{ active: couponId === '' }" @click="couponId = ''">不使用</button>
+            <button v-for="coupon in availableCoupons" :key="coupon.id" class="coupon" :class="{ active: couponId === coupon.id }" @click="couponId = coupon.id">{{ coupon.name }} -{{ formatMoney(coupon.discountCents) }}</button>
+          </scroll-view>
+        </view>
+        <view class="form-row"><text>订单备注</text><input v-model="remark" maxlength="30" placeholder="口味偏好、取餐说明" /></view>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-heading"><text class="section-title">支付方式</text><text class="demo-label">本地演示</text></view>
+      <view class="payment-card card">
+        <button v-for="item in [{id:'wechat',name:'微信支付'},{id:'alipay',name:'支付宝'},{id:'balance',name:'咖啡钱包'}]" :key="item.id" class="payment-row" @click="payment = item.id">
+          <text class="payment-name">{{ item.name }}</text><text class="radio" :class="{ active: payment === item.id }">{{ payment === item.id ? '✓' : '' }}</text>
+        </button>
+      </view>
+    </view>
+
+    <view class="summary section card">
+      <view><text>商品金额</text><text>{{ formatMoney(store.cartSubtotal.value) }}</text></view>
+      <view><text>优惠</text><text class="discount">-{{ formatMoney(discount) }}</text></view>
+      <view class="summary-total"><text>合计</text><text>{{ formatMoney(total) }}</text></view>
+    </view>
+
+    <view class="pay-bar">
+      <view><text class="pay-label">实付</text><text class="pay-total">{{ formatMoney(total) }}</text></view>
+      <button class="pay-button" :class="{ disabled: !store.state.cart.length }" @click="submit">确认支付</button>
     </view>
   </view>
 </template>
 
-<script setup>
-import { onLoad, onUnload } from '@dcloudio/uni-app'
-import { ref, reactive, onMounted, defineProps, defineEmits, watch, computed } from 'vue'
-import ShopCard from '@/component/ShopCard.vue'
-import { OrderType, OrderStatus } from '@/enums/HutuEnums'
-import { commonNavigate } from '@/utils/CommonUtils'
-import { confirmOrderAPI } from '@/pages/confirm-order/api/index'
-import FeatureItem from '@/component/FeatureItem.vue'
-import { config } from '@/config/index'
-
-// Data
-const itemInfo = ref([])
-const pickUpType = ref('')
-const currentShop = ref({})
-const orderType = ref('')
-const selectedCopuon = ref('')
-const remark = ref('')
-const expectArrivalTime = ref('')
-let payTimeer = null
-// Computed
-const totalPrice = computed(() => {
-  let total = 0
-  if (itemInfo.value) {
-    itemInfo.value.forEach(item => {
-      total += item.price * item.count
-    })
-  }
-  return total
-})
-// Emits
-const emit = defineEmits([
-
-])
-
-// Props
-const props = defineProps({
-
-})
-
-// Lifecycle hooks
-onMounted(() => {
-  getCurrentShop()
-  getItems()
-})
-onLoad((opt) => {
-  pickUpType.value = opt.pickUpType
-  orderType.value = opt.orderType
-})
-onUnload(() => {
-  clearInterval(payTimeer)
-})
-
-// Watchers
-
-// Methods
-const getCurrentShop = () => {
-  currentShop.value = uni.getStorageSync('CURRENT_SHOP')
-}
-
-const getItems = () => {
-  itemInfo.value = uni.getStorageSync('CART-SUBMIT')
-  console.log('itemInfo', itemInfo.value);
-
-}
-
-const changePickUpType = (type) => {
-  pickUpType.value = type
-}
-
-const toggleCoupon = () => {
-}
-
-const toggleRemark = () => {
-}
-
-const toggleExpectArrivalTime = () => {
-}
-
-const handlePay = async () => {
-  if (!currentShop.value) {
-    uni.showToast({
-      title: '暂无门店，请选择门店',
-      icon: 'none'
-    })
-    return
-  }
-  if (!itemInfo.value || itemInfo.value.length == 0) {
-    uni.showToast({
-      title: '请选择商品',
-      icon: 'none'
-    })
-    return
-  }
-  // 提交订单数据
-  const res = await confirmOrderAPI.submitBizOrder({
-    shopId: currentShop.value.id,
-    orderType: orderType.value,
-    pickUpType: pickUpType.value,
-    remark: remark.value,
-    expectArrivalTime: expectArrivalTime.value,
-    couponId: selectedCopuon.value ? selectedCopuon.value.id : '',
-    items: itemInfo.value,
-    payWay: 'WXPAY',
-    payCode: '5505'
-  })
-  // 调起微信小程序支付
-  uni.showToast({
-    title: '模拟支付中',
-    icon: 'success'
-    , duration: 2000
-  })
-  const orderId = res.data.orderId
-  // 轮询订单状态
-  payTimeer = setInterval(() => {
-    confirmOrderAPI.queryOrder(orderId).then(res => {
-      console.log('queryOrder', res);
-      if (res.data.orderStatus == OrderStatus.PAYED) {
-        clearInterval(payTimeer)
-        commonNavigate('/pages/settled/index?orderId=' + orderId)
-      }
-    })
-  }, 500)
-}
-
-const getSkuStr = (item) => {
-  return item.skus.map(sku => {
-    return `${sku.optionLabel}`
-  }).join('/')
-}
-</script>
-
 <style scoped lang="scss">
-.body {
-  height: 100vh;
-  width: 100vw;
-  background-color: #f5f5f5;
-  display: flex;
-  flex-direction: column;
-}
-
-.shop-card {
-  margin: 20rpx 0;
-  border-radius: 0;
-}
-
-.box {
-  background-color: #ffffff;
-}
-
-.content {
-  flex: 1;
-  margin: 20rpx 20rpx 0;
-  border-radius: 20rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.05);
-  overflow: hidden;
-  box-sizing: border-box;
-
-  .scroll-content {
-    height: 100%;
-  }
-}
-
-.cart-list {
-  padding: 30rpx;
-
-  .cart-detail-item {
-    padding: 30rpx 0;
-    border-bottom: 1rpx solid #f0f0f0;
-
-    &:last-child {
-      border-bottom: none;
-    }
-
-    .cart-detail-item-content {
-      display: flex;
-
-      .cart-detail-item-content-left {
-        margin-right: 20rpx;
-
-        .item-image {
-          width: 120rpx;
-          height: 120rpx;
-          border-radius: 12rpx;
-          background-color: #f8f4f0;
-        }
-      }
-
-      .cart-detail-item-content-right {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        position: relative;
-
-        .cart-detail-item-content-right-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 16rpx;
-
-          .title {
-            font-size: 32rpx;
-            font-weight: bold;
-            color: #333;
-            flex: 1;
-            margin-right: 20rpx;
-          }
-
-          .price {
-            font-size: 32rpx;
-            font-weight: bold;
-            color: #8B7355;
-            white-space: nowrap;
-          }
-        }
-
-        .cart-detail-item-content-right-body {
-          margin-bottom: 20rpx;
-
-          .sku {
-            font-size: 24rpx;
-            color: #666;
-            line-height: 1.5;
-            margin-bottom: 12rpx;
-            // width: 80%;
-          }
-
-          .sku-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12rpx;
-
-            .sku-tag {
-              font-size: 24rpx;
-              color: #666;
-              background: #f5f5f5;
-              padding: 4rpx 12rpx;
-              border-radius: 16rpx;
-
-              text {
-                color: #8B7355;
-                font-size: 20rpx;
-                margin-left: 4rpx;
-              }
-            }
-          }
-        }
-
-        .cart-detail-item-content-right-footer {
-          position: absolute;
-          right: 0;
-          bottom: 0;
-
-          .count {
-            font-size: 28rpx;
-            color: #333;
-            font-weight: bold;
-            min-width: 60rpx;
-            text-align: right;
-          }
-        }
-      }
-    }
-  }
-}
-
-.feature-section {
-  padding: 30rpx;
-  // background: #fafafa;
-  margin-top: 20rpx;
-  border-radius: 20rpx 20rpx 0 0;
-
-  .feature-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 24rpx 0;
-    border-bottom: 1rpx solid #f0f0f0;
-
-    &:last-child {
-      border-bottom: none;
-    }
-
-    .feature-left {
-      display: flex;
-      align-items: center;
-
-      .feature-title {
-        font-size: 28rpx;
-        color: #333;
-        margin-left: 12rpx;
-      }
-    }
-
-    .feature-right {
-      display: flex;
-      align-items: center;
-
-      .feature-value {
-        font-size: 28rpx;
-        color: #333;
-        max-width: 300rpx;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        margin-right: 12rpx;
-
-        &.placeholder {
-          color: #999;
-        }
-      }
-    }
-
-    &:active {
-      opacity: 0.7;
-    }
-  }
-}
-
-.footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: white;
-  padding: 20rpx 30rpx;
-  box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.1);
-  z-index: 100;
-
-  .footer-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-
-    .total-info {
-      .total-label {
-        font-size: 28rpx;
-        color: #666;
-      }
-
-      .total-price {
-        font-size: 36rpx;
-        font-weight: bold;
-        color: #8B7355;
-      }
-    }
-
-    .pay-btn {
-      width: 240rpx;
-      height: 80rpx;
-      background: linear-gradient(135deg, #8B7355 0%, #A58C6D 100%);
-      border-radius: 40rpx;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 32rpx;
-      font-weight: bold;
-      color: white;
-      box-shadow: 0 8rpx 24rpx rgba(139, 115, 85, 0.3);
-
-      &:active {
-        opacity: 0.9;
-        transform: scale(0.98);
-      }
-    }
-  }
-}
-
-// 为内容区域添加底部内边距，避免被footer遮挡
-.scroll-content {
-  padding-bottom: 140rpx;
-  box-sizing: border-box;
-}
+.checkout-page{padding-bottom:170rpx}.checkout-header{position:relative;padding:calc(92rpx + env(safe-area-inset-top)) 30rpx 78rpx;background:linear-gradient(145deg,#2f2019,#624432);color:white}.top-back{position:absolute;left:26rpx;top:calc(22rpx + env(safe-area-inset-top));width:66rpx;height:66rpx;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(255,255,255,.12);color:white;font-size:48rpx;padding-bottom:8rpx}.eyebrow,.header-title,.header-subtitle{display:block}.eyebrow{font-size:19rpx;letter-spacing:5rpx;color:#dfbd91}.header-title{margin-top:14rpx;font-size:48rpx;font-weight:800}.header-subtitle{margin-top:10rpx;font-size:24rpx;color:rgba(255,255,255,.65)}.first-section{position:relative;z-index:2;margin-top:-38rpx}.store-card{display:flex;align-items:center;gap:18rpx;padding:24rpx}.store-icon{width:66rpx;height:66rpx;display:flex;align-items:center;justify-content:center;border-radius:20rpx;background:var(--oat-100);color:var(--coffee-700);font-weight:800}.store-main{flex:1;min-width:0}.store-name,.store-address{display:block}.store-name{font-size:28rpx;font-weight:750}.store-address{margin-top:7rpx;color:var(--muted);font-size:21rpx;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.store-time{font-size:22rpx;color:var(--green)}
+.mode-switch{display:grid;grid-template-columns:1fr 1fr;padding:8rpx}.mode-switch button{height:74rpx;border-radius:18rpx;color:var(--muted);font-size:25rpx}.mode-switch button.active{background:var(--coffee-800);color:white;font-weight:700}.time-row{display:flex;gap:12rpx;margin-top:16rpx;overflow:auto}.time-chip{flex-shrink:0;padding:17rpx 22rpx;border-radius:30rpx;background:#fff;color:var(--muted);font-size:22rpx}.time-chip.active{background:var(--oat-100);color:var(--coffee-800);font-weight:700}
+.items{padding:0 24rpx}.item-row{display:flex;align-items:center;gap:16rpx;padding:23rpx 0;border-bottom:1rpx solid var(--line)}.item-row:last-child{border-bottom:0}.item-fallback{width:82rpx;height:82rpx;display:flex;align-items:center;justify-content:center;border-radius:18rpx;background:var(--oat-100);font-size:42rpx}.item-info{flex:1;min-width:0}.item-name,.item-options,.item-price text{display:block}.item-name{font-weight:700;font-size:26rpx}.item-options{margin-top:7rpx;color:var(--muted);font-size:20rpx;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.item-price{text-align:right;font-size:23rpx}.item-price text:last-child{margin-top:8rpx;color:var(--muted)}
+.form-card{padding:0 24rpx}.form-row{display:flex;align-items:center;gap:16rpx;min-height:92rpx;border-bottom:1rpx solid var(--line);font-size:25rpx}.form-row:last-child{border-bottom:0}.form-row>text{width:116rpx;font-weight:650}.form-row input{flex:1;text-align:right;font-size:23rpx}.coupon-row{align-items:flex-start;padding:20rpx 0}.coupon-row>text{padding-top:13rpx}.coupon-scroll{flex:1;white-space:nowrap}.coupon{display:inline-flex;margin-left:10rpx;padding:12rpx 18rpx;border-radius:24rpx;background:var(--oat-50);color:var(--muted);font-size:20rpx}.coupon.active{background:var(--coffee-800);color:white}.demo-label{padding:7rpx 12rpx;border-radius:10rpx;background:#e7efe7;color:var(--green);font-size:19rpx}
+.payment-card{padding:0 24rpx}.payment-row{display:flex;align-items:center;width:100%;height:90rpx;border-bottom:1rpx solid var(--line);font-size:25rpx;color:var(--ink)}.payment-row:last-child{border-bottom:0}.payment-name{flex:1;text-align:left}.radio{width:38rpx;height:38rpx;display:flex;align-items:center;justify-content:center;border:2rpx solid #d8cec2;border-radius:50%;font-size:20rpx}.radio.active{border-color:var(--coffee-700);background:var(--coffee-700);color:white}.summary{padding:20rpx 24rpx}.summary>view{display:flex;justify-content:space-between;padding:11rpx 0;color:var(--muted);font-size:23rpx}.summary .discount{color:var(--danger)}.summary .summary-total{margin-top:8rpx;padding-top:20rpx;border-top:1rpx solid var(--line);color:var(--coffee-900);font-size:29rpx;font-weight:800}
+.pay-bar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:18rpx 26rpx calc(18rpx + env(safe-area-inset-bottom));background:white;box-shadow:0 -8rpx 30rpx rgba(53,35,27,.08)}.pay-label{font-size:21rpx;color:var(--muted)}.pay-total{margin-left:10rpx;color:var(--danger);font-size:35rpx;font-weight:800}.pay-button{width:260rpx;height:82rpx;border-radius:41rpx;background:var(--coffee-900);color:white;font-size:27rpx;font-weight:750}.pay-button.disabled{opacity:.4}@media screen and (min-width:760px){.pay-bar{max-width:750px;margin:auto}}
 </style>
