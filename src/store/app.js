@@ -1,30 +1,30 @@
 import { computed, reactive } from 'vue'
-import { COUPONS, DEMO_USER, PRODUCTS, STORES } from '@/data/catalog'
+import { COUPONS, PRODUCTS, STALLS, STORES, USER_PROFILE } from '@/data/catalog'
 import { createOrderNo } from '@/utils/format'
 
-const STORAGE_KEY = 'CAMPUS_COFFEE_DEMO_V4'
-const demoOrderItem = (productId, quantity = 1, selectedOptions = []) => {
+const STORAGE_KEY = 'CAMPUS_ORDERING_V11'
+const seedOrderItem = (productId, quantity = 1, selectedOptions = []) => {
   const product = PRODUCTS.find((item) => item.id === productId)
   const extras = selectedOptions.reduce((sum, option) => sum + Number(option.extraCents || 0), 0)
-  return { key: `${productId}:demo`, productId, name: product.name, image: product.image, fallback: product.fallback, selectedOptions, unitPriceCents: product.priceCents + extras, quantity }
+  return { key: `${productId}:seed`, productId, name: product.name, stallName: product.stallName, image: product.image, fallback: product.fallback, selectedOptions, unitPriceCents: product.priceCents + extras, quantity }
 }
-const createDemoOrders = () => {
-  const activeItems = [demoOrderItem('coconut-latte', 1, [{ id: 'large', name: '大杯', groupName: '杯型', extraCents: 300 }, { id: 'iced', name: '冰', groupName: '温度', extraCents: 0 }, { id: 'half', name: '半糖', groupName: '甜度', extraCents: 0 }])]
-  const historyItems = [demoOrderItem('grape-tea'), demoOrderItem('croissant')]
+const createInitialOrders = () => {
+  const activeItems = [seedOrderItem('black-pepper-chicken-rice', 1, [{ id: 'regular', name: '标准份', groupName: '份量', extraCents: 0 }])]
+  const historyItems = [seedOrderItem('henan-huimian'), seedOrderItem('beef-pan-fried-buns')]
   return [
-    { id: 'HT-DEMO-0928', storeId: STORES[0].id, storeName: STORES[0].name, mode: 'pickup', status: 'making', statusText: '制作中', pickupCode: '218', createdAt: Date.now() - 6 * 60 * 1000, pickupTime: '尽快取餐', remark: '', items: activeItems, subtotalCents: 2100, discountCents: 0, totalCents: 2100, couponName: '' },
-    { id: 'HT-DEMO-0927', storeId: STORES[0].id, storeName: STORES[0].name, mode: 'dineIn', status: 'completed', statusText: '已完成', pickupCode: '506', createdAt: Date.now() - 26 * 60 * 60 * 1000, pickupTime: '15 分钟后', remark: '少冰', items: historyItems, subtotalCents: 2800, discountCents: 0, totalCents: 2800, couponName: '' },
+    { id: 'XC-20261002-0928', storeId: STORES[0].id, storeName: STORES[0].name, mode: 'pickup', status: 'making', statusText: '制作中', pickupCode: '218', createdAt: Date.now() - 6 * 60 * 1000, pickupTime: '尽快取餐', remark: '', items: activeItems, subtotalCents: 1880, discountCents: 0, totalCents: 1880, couponName: '' },
+    { id: 'XC-20261001-0927', storeId: STORES[0].id, storeName: STORES[0].name, mode: 'dineIn', status: 'completed', statusText: '已完成', pickupCode: '506', createdAt: Date.now() - 26 * 60 * 60 * 1000, pickupTime: '15 分钟后', remark: '微辣', items: historyItems, subtotalCents: 3160, discountCents: 0, totalCents: 3160, couponName: '' },
   ]
 }
-const initialState = () => ({ initialized: false, currentStoreId: STORES[0].id, orderMode: 'pickup', cart: [], orders: createDemoOrders(), favoriteIds: ['coconut-latte', 'grape-tea'], couponIds: COUPONS.map((coupon) => coupon.id), user: { ...DEMO_USER } })
+const initialState = () => ({ initialized: false, currentStoreId: STORES[0].id, selectedStallId: STALLS[0].id, orderMode: 'pickup', cart: [], orders: createInitialOrders(), favoriteIds: ['black-pepper-chicken-rice', 'henan-huimian'], couponIds: COUPONS.map((coupon) => coupon.id), user: { ...USER_PROFILE } })
 const state = reactive(initialState())
 
 function persist() {
   if (!state.initialized) return
-  uni.setStorageSync(STORAGE_KEY, { currentStoreId: state.currentStoreId, orderMode: state.orderMode, cart: state.cart, orders: state.orders, favoriteIds: state.favoriteIds, couponIds: state.couponIds, user: state.user })
+  uni.setStorageSync(STORAGE_KEY, { currentStoreId: state.currentStoreId, selectedStallId: state.selectedStallId, orderMode: state.orderMode, cart: state.cart, orders: state.orders, favoriteIds: state.favoriteIds, couponIds: state.couponIds, user: state.user })
 }
 
-export function initializeDemoStore() {
+export function initializeStore() {
   if (state.initialized) return
   const saved = uni.getStorageSync(STORAGE_KEY)
   if (saved && typeof saved === 'object') Object.assign(state, initialState(), saved)
@@ -34,7 +34,7 @@ export function initializeDemoStore() {
 const cartKey = (productId, options) => `${productId}:${options.map((option) => option.id).sort().join('-')}`
 
 export function useAppStore() {
-  initializeDemoStore()
+  initializeStore()
   const currentStore = computed(() => STORES.find((store) => store.id === state.currentStoreId) || STORES[0])
   const cartCount = computed(() => state.cart.reduce((sum, item) => sum + item.quantity, 0))
   const cartSubtotal = computed(() => state.cart.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0))
@@ -46,6 +46,7 @@ export function useAppStore() {
     persist()
   }
   function setOrderMode(mode) { state.orderMode = mode === 'dineIn' ? 'dineIn' : 'pickup'; persist() }
+  function setStall(stallId) { if (STALLS.some((stall) => stall.id === stallId)) { state.selectedStallId = stallId; persist() } }
   function addToCart(productId, selectedOptions = [], quantity = 1) {
     const product = PRODUCTS.find((item) => item.id === productId)
     if (!product) return
@@ -53,7 +54,7 @@ export function useAppStore() {
     const key = cartKey(productId, options)
     const existing = state.cart.find((item) => item.key === key)
     if (existing) existing.quantity += quantity
-    else state.cart.push({ key, productId, name: product.name, image: product.image, fallback: product.fallback, selectedOptions: options, unitPriceCents: product.priceCents + options.reduce((sum, option) => sum + option.extraCents, 0), quantity })
+    else state.cart.push({ key, productId, name: product.name, stallName: product.stallName, image: product.image, fallback: product.fallback, selectedOptions: options, unitPriceCents: product.priceCents + options.reduce((sum, option) => sum + option.extraCents, 0), quantity })
     persist()
   }
   function updateCartQuantity(key, quantity) {
@@ -87,8 +88,8 @@ export function useAppStore() {
     const next = sequence[Math.min(index + 1, sequence.length - 1)]
     order.status = next[0]; order.statusText = next[1]; persist()
   }
-  function reorder(orderId) { const order = findOrder(orderId); if (!order) return; state.currentStoreId = order.storeId; state.orderMode = order.mode; state.cart = JSON.parse(JSON.stringify(order.items)); persist() }
-  function resetDemo() { Object.assign(state, initialState(), { initialized: true }); persist() }
+  function reorder(orderId) { const order = findOrder(orderId); if (!order) return; state.currentStoreId = order.storeId; state.orderMode = order.mode; state.cart = JSON.parse(JSON.stringify(order.items)); const firstProduct = PRODUCTS.find((product) => product.id === order.items[0]?.productId); if (firstProduct) state.selectedStallId = firstProduct.stallId; persist() }
+  function resetStore() { Object.assign(state, initialState(), { initialized: true }); persist() }
 
-  return { state, currentStore, cartCount, cartSubtotal, setStore, setOrderMode, addToCart, updateCartQuantity, clearCart, toggleFavorite, createOrder, findOrder, advanceOrder, reorder, resetDemo }
+  return { state, currentStore, cartCount, cartSubtotal, setStore, setOrderMode, setStall, addToCart, updateCartQuantity, clearCart, toggleFavorite, createOrder, findOrder, advanceOrder, reorder, resetStore }
 }

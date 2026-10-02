@@ -15,5 +15,5 @@ export function formatDateTime(timestamp) {
 export function createOrderNo() {
   const now = new Date()
   const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
-  return `HT${stamp}${String(now.getTime()).slice(-6)}`
+  return `XC${stamp}${String(now.getTime()).slice(-6)}`
 }

@@ -61,3 +61,6 @@ yarn.lock
 web/upload
 manifest.json
 
+# Local UI review screenshots (not part of the product source)
+/doc/*.png
+

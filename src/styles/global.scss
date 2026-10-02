@@ -1,22 +1,22 @@
 :root {
-  --brand: #1a4b3a;
-  --brand-dark: #10362a;
-  --brand-soft: #e8f1eb;
-  --coffee-950: #15372d;
-  --coffee-900: #1c4637;
-  --coffee-800: #285744;
-  --coffee-700: #356650;
-  --coffee-600: #547765;
-  --caramel-500: #c88945;
-  --caramel-300: #e4bd82;
-  --oat-100: #f2efe9;
-  --oat-50: #f8f7f3;
+  --brand: #0637c9;
+  --brand-dark: #06268f;
+  --brand-soft: #edf2ff;
+  --brand-950: #071a62;
+  --brand-900: #0b247f;
+  --brand-800: #143ca8;
+  --brand-700: #2458c8;
+  --brand-600: #5274b9;
+  --caramel-500: #c79545;
+  --caramel-300: #edcf91;
+  --oat-100: #f1f3f7;
+  --oat-50: #f6f7f9;
   --paper: #ffffff;
-  --ink: #1f2924;
-  --muted: #748078;
-  --line: #e8e7e1;
-  --green: #2f6b4f;
-  --danger: #b95043;
+  --ink: #25272d;
+  --muted: #8b8e97;
+  --line: #e9ebef;
+  --green: #0637c9;
+  --danger: #f04b2f;
 }
 
 page {
@@ -40,13 +40,13 @@ button::after { border: 0; }
 .section { padding: 0 28rpx; margin-top: 36rpx; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20rpx; }
 .section-title { font-size: 34rpx; font-weight: 700; letter-spacing: .5rpx; }
-.section-link { font-size: 24rpx; color: var(--coffee-600); }
+.section-link { font-size: 24rpx; color: var(--brand-600); }
 
 .card {
   background: var(--paper);
-  border: 1rpx solid rgba(27, 70, 55, .07);
+  border: 1rpx solid rgba(13, 32, 96, .055);
   border-radius: 24rpx;
-  box-shadow: 0 10rpx 30rpx rgba(29, 51, 42, .055);
+  box-shadow: 0 10rpx 30rpx rgba(20, 39, 89, .065);
 }
 
 .primary-button {
@@ -60,12 +60,12 @@ button::after { border: 0; }
   background: linear-gradient(135deg, var(--brand), var(--brand-dark));
   font-size: 30rpx;
   font-weight: 700;
-  box-shadow: 0 12rpx 26rpx rgba(20, 66, 49, .22);
+  box-shadow: 0 12rpx 26rpx rgba(6, 55, 201, .22);
 }
 
 .primary-button:active { transform: scale(.985); }
 .primary-button.disabled { opacity: .45; }
-.chip { display: inline-flex; align-items: center; min-height: 48rpx; padding: 0 18rpx; border-radius: 24rpx; background: var(--oat-100); color: var(--coffee-700); font-size: 22rpx; }
+.chip { display: inline-flex; align-items: center; min-height: 48rpx; padding: 0 18rpx; border-radius: 24rpx; background: var(--oat-100); color: var(--brand-700); font-size: 22rpx; }
 .price { color: var(--danger); font-weight: 750; }
 .muted { color: var(--muted); }
 

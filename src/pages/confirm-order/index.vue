@@ -12,7 +12,7 @@ const couponId = ref('')
 const payment = ref('wechat')
 const paying = ref(false)
 
-onShow(() => { if (!store.state.cart.length) uni.showToast({ title: '购物袋还是空的', icon: 'none' }) })
+onShow(() => { if (!store.state.cart.length) uni.showToast({ title: '购物车暂无餐品', icon: 'none' }) })
 
 const availableCoupons = computed(() => COUPONS.filter((coupon) => store.state.couponIds.includes(coupon.id) && store.cartSubtotal.value >= coupon.thresholdCents))
 const chosenCoupon = computed(() => COUPONS.find((coupon) => coupon.id === couponId.value))
@@ -22,7 +22,7 @@ const total = computed(() => Math.max(0, store.cartSubtotal.value - discount.val
 function submit() {
   if (!store.state.cart.length || paying.value) return
   paying.value = true
-  uni.showLoading({ title: '模拟支付中' })
+  uni.showLoading({ title: '支付中' })
   setTimeout(() => {
     uni.hideLoading()
     const order = store.createOrder({ couponId: couponId.value, remark: remark.value.trim(), pickupTime: pickupTime.value })
@@ -36,7 +36,7 @@ function submit() {
   <view class="page-shell checkout-page">
     <view class="checkout-header">
       <button class="top-back" @click="uni.navigateBack()">‹</button>
-      <text class="eyebrow">ORDER REVIEW</text><text class="header-title">确认订单</text><text class="header-subtitle">核对好口味，到店直接取</text>
+      <text class="eyebrow">ORDER REVIEW</text><text class="header-title">确认订单</text><text class="header-subtitle">请确认餐品、取餐与支付信息</text>
     </view>
 
     <view class="section first-section">
@@ -51,7 +51,7 @@ function submit() {
       <view class="section-heading"><text class="section-title">取餐方式</text></view>
       <view class="mode-switch card">
         <button :class="{ active: store.state.orderMode === 'pickup' }" @click="store.setOrderMode('pickup')">到店自取</button>
-        <button :class="{ active: store.state.orderMode === 'dineIn' }" @click="store.setOrderMode('dineIn')">门店堂食</button>
+        <button :class="{ active: store.state.orderMode === 'dineIn' }" @click="store.setOrderMode('dineIn')">餐厅堂食</button>
       </view>
       <view class="time-row">
         <button v-for="time in ['尽快取餐','15 分钟后','30 分钟后']" :key="time" class="time-chip" :class="{ active: pickupTime === time }" @click="pickupTime = time">{{ time }}</button>
@@ -59,11 +59,11 @@ function submit() {
     </view>
 
     <view class="section">
-      <view class="section-heading"><text class="section-title">商品清单</text><text class="section-link">共 {{ store.cartCount.value }} 件</text></view>
+      <view class="section-heading"><text class="section-title">餐品清单</text><text class="section-link">共 {{ store.cartCount.value }} 件</text></view>
       <view class="items card">
         <view v-for="item in store.state.cart" :key="item.key" class="item-row">
           <image class="item-fallback" :src="item.image" mode="aspectFill" />
-          <view class="item-info"><text class="item-name">{{ item.name }}</text><text class="item-options">{{ item.selectedOptions.map(option => option.name).join(' · ') || '标准制作' }}</text></view>
+          <view class="item-info"><text class="item-name">{{ item.name }}</text><text class="item-stall">{{ item.stallName }}</text><text class="item-options">{{ item.selectedOptions.map(option => option.name).join(' · ') || '标准制作' }}</text></view>
           <view class="item-price"><text>{{ formatMoney(item.unitPriceCents) }}</text><text>× {{ item.quantity }}</text></view>
         </view>
       </view>
@@ -84,17 +84,17 @@ function submit() {
     </view>
 
     <view class="section">
-      <view class="section-heading"><text class="section-title">支付方式</text><text class="demo-label">本地演示</text></view>
+      <view class="section-heading"><text class="section-title">支付方式</text></view>
       <view class="payment-card card">
-        <button v-for="item in [{id:'wechat',name:'微信支付'},{id:'alipay',name:'支付宝'},{id:'balance',name:'咖啡钱包'}]" :key="item.id" class="payment-row" @click="payment = item.id">
+        <button v-for="item in [{id:'wechat',name:'微信支付'},{id:'alipay',name:'支付宝'},{id:'balance',name:'会员余额'}]" :key="item.id" class="payment-row" @click="payment = item.id">
           <text class="payment-name">{{ item.name }}</text><text class="radio" :class="{ active: payment === item.id }">{{ payment === item.id ? '✓' : '' }}</text>
         </button>
       </view>
     </view>
 
     <view class="summary section card">
-      <view><text>商品金额</text><text>{{ formatMoney(store.cartSubtotal.value) }}</text></view>
-      <view><text>优惠</text><text class="discount">-{{ formatMoney(discount) }}</text></view>
+      <view><text>餐品金额</text><text>{{ formatMoney(store.cartSubtotal.value) }}</text></view>
+      <view><text>优惠</text><text class="discount">{{ discount ? `-${formatMoney(discount)}` : formatMoney(0) }}</text></view>
       <view class="summary-total"><text>合计</text><text>{{ formatMoney(total) }}</text></view>
     </view>
 
@@ -106,10 +106,11 @@ function submit() {
 </template>
 
 <style scoped lang="scss">
-.checkout-page{padding-bottom:170rpx}.checkout-header{position:relative;padding:calc(92rpx + env(safe-area-inset-top)) 30rpx 78rpx;background:linear-gradient(145deg,#2f2019,#624432);color:white}.top-back{position:absolute;left:26rpx;top:calc(22rpx + env(safe-area-inset-top));width:66rpx;height:66rpx;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(255,255,255,.12);color:white;font-size:48rpx;padding-bottom:8rpx}.eyebrow,.header-title,.header-subtitle{display:block}.eyebrow{font-size:19rpx;letter-spacing:5rpx;color:#dfbd91}.header-title{margin-top:14rpx;font-size:48rpx;font-weight:800}.header-subtitle{margin-top:10rpx;font-size:24rpx;color:rgba(255,255,255,.65)}.first-section{position:relative;z-index:2;margin-top:-38rpx}.store-card{display:flex;align-items:center;gap:18rpx;padding:24rpx}.store-icon{width:66rpx;height:66rpx;display:flex;align-items:center;justify-content:center;border-radius:20rpx;background:var(--oat-100);color:var(--coffee-700);font-weight:800}.store-main{flex:1;min-width:0}.store-name,.store-address{display:block}.store-name{font-size:28rpx;font-weight:750}.store-address{margin-top:7rpx;color:var(--muted);font-size:21rpx;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.store-time{font-size:22rpx;color:var(--green)}
-.mode-switch{display:grid;grid-template-columns:1fr 1fr;padding:8rpx}.mode-switch button{height:74rpx;border-radius:18rpx;color:var(--muted);font-size:25rpx}.mode-switch button.active{background:var(--coffee-800);color:white;font-weight:700}.time-row{display:flex;gap:12rpx;margin-top:16rpx;overflow:auto}.time-chip{flex-shrink:0;padding:17rpx 22rpx;border-radius:30rpx;background:#fff;color:var(--muted);font-size:22rpx}.time-chip.active{background:var(--oat-100);color:var(--coffee-800);font-weight:700}
+.checkout-page{padding-bottom:170rpx}.checkout-header{position:relative;padding:calc(92rpx + env(safe-area-inset-top)) 30rpx 78rpx;background:linear-gradient(145deg,#2f2019,#624432);color:white}.top-back{position:absolute;left:26rpx;top:calc(22rpx + env(safe-area-inset-top));width:66rpx;height:66rpx;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(255,255,255,.12);color:white;font-size:48rpx;padding-bottom:8rpx}.eyebrow,.header-title,.header-subtitle{display:block}.eyebrow{font-size:19rpx;letter-spacing:5rpx;color:#dfbd91}.header-title{margin-top:14rpx;font-size:48rpx;font-weight:800}.header-subtitle{margin-top:10rpx;font-size:24rpx;color:rgba(255,255,255,.65)}.first-section{position:relative;z-index:2;margin-top:-38rpx}.store-card{display:flex;align-items:center;gap:18rpx;padding:24rpx}.store-icon{width:66rpx;height:66rpx;display:flex;align-items:center;justify-content:center;border-radius:20rpx;background:var(--oat-100);color:var(--brand-700);font-weight:800}.store-main{flex:1;min-width:0}.store-name,.store-address{display:block}.store-name{font-size:28rpx;font-weight:750}.store-address{margin-top:7rpx;color:var(--muted);font-size:21rpx;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.store-time{font-size:22rpx;color:var(--green)}
+.mode-switch{display:grid;grid-template-columns:1fr 1fr;padding:8rpx}.mode-switch button{height:74rpx;border-radius:18rpx;color:var(--muted);font-size:25rpx}.mode-switch button.active{background:var(--brand-800);color:white;font-weight:700}.time-row{display:flex;gap:12rpx;margin-top:16rpx;overflow:auto}.time-chip{flex-shrink:0;padding:17rpx 22rpx;border-radius:30rpx;background:#fff;color:var(--muted);font-size:22rpx}.time-chip.active{background:var(--oat-100);color:var(--brand-800);font-weight:700}
 .items{padding:0 24rpx}.item-row{display:flex;align-items:center;gap:16rpx;padding:23rpx 0;border-bottom:1rpx solid var(--line)}.item-row:last-child{border-bottom:0}.item-fallback{width:82rpx;height:82rpx;display:flex;align-items:center;justify-content:center;border-radius:18rpx;background:var(--oat-100);font-size:42rpx}.item-info{flex:1;min-width:0}.item-name,.item-options,.item-price text{display:block}.item-name{font-weight:700;font-size:26rpx}.item-options{margin-top:7rpx;color:var(--muted);font-size:20rpx;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.item-price{text-align:right;font-size:23rpx}.item-price text:last-child{margin-top:8rpx;color:var(--muted)}
-.form-card{padding:0 24rpx}.form-row{display:flex;align-items:center;gap:16rpx;min-height:92rpx;border-bottom:1rpx solid var(--line);font-size:25rpx}.form-row:last-child{border-bottom:0}.form-row>text{width:116rpx;font-weight:650}.form-row input{flex:1;text-align:right;font-size:23rpx}.coupon-row{align-items:flex-start;padding:20rpx 0}.coupon-row>text{padding-top:13rpx}.coupon-scroll{flex:1;white-space:nowrap}.coupon{display:inline-flex;margin-left:10rpx;padding:12rpx 18rpx;border-radius:24rpx;background:var(--oat-50);color:var(--muted);font-size:20rpx}.coupon.active{background:var(--coffee-800);color:white}.demo-label{padding:7rpx 12rpx;border-radius:10rpx;background:#e7efe7;color:var(--green);font-size:19rpx}
-.payment-card{padding:0 24rpx}.payment-row{display:flex;align-items:center;width:100%;height:90rpx;border-bottom:1rpx solid var(--line);font-size:25rpx;color:var(--ink)}.payment-row:last-child{border-bottom:0}.payment-name{flex:1;text-align:left}.radio{width:38rpx;height:38rpx;display:flex;align-items:center;justify-content:center;border:2rpx solid #d8cec2;border-radius:50%;font-size:20rpx}.radio.active{border-color:var(--coffee-700);background:var(--coffee-700);color:white}.summary{padding:20rpx 24rpx}.summary>view{display:flex;justify-content:space-between;padding:11rpx 0;color:var(--muted);font-size:23rpx}.summary .discount{color:var(--danger)}.summary .summary-total{margin-top:8rpx;padding-top:20rpx;border-top:1rpx solid var(--line);color:var(--coffee-900);font-size:29rpx;font-weight:800}
-.pay-bar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:18rpx 26rpx calc(18rpx + env(safe-area-inset-bottom));background:white;box-shadow:0 -8rpx 30rpx rgba(53,35,27,.08)}.pay-label{font-size:21rpx;color:var(--muted)}.pay-total{margin-left:10rpx;color:var(--danger);font-size:35rpx;font-weight:800}.pay-button{width:260rpx;height:82rpx;border-radius:41rpx;background:var(--coffee-900);color:white;font-size:27rpx;font-weight:750}.pay-button.disabled{opacity:.4}@media screen and (min-width:760px){.pay-bar{max-width:750px;margin:auto}}
+.form-card{padding:0 24rpx}.form-row{display:flex;align-items:center;gap:16rpx;min-height:92rpx;border-bottom:1rpx solid var(--line);font-size:25rpx}.form-row:last-child{border-bottom:0}.form-row>text{width:116rpx;font-weight:650}.form-row input{flex:1;text-align:right;font-size:23rpx}.coupon-row{align-items:flex-start;padding:20rpx 0}.coupon-row>text{padding-top:13rpx}.coupon-scroll{flex:1;white-space:nowrap}.coupon{display:inline-flex;margin-left:10rpx;padding:12rpx 18rpx;border-radius:24rpx;background:var(--oat-50);color:var(--muted);font-size:20rpx}.coupon.active{background:var(--brand-800);color:white}
+.payment-card{padding:0 24rpx}.payment-row{display:flex;align-items:center;width:100%;height:90rpx;border-bottom:1rpx solid var(--line);font-size:25rpx;color:var(--ink)}.payment-row:last-child{border-bottom:0}.payment-name{flex:1;text-align:left}.radio{width:38rpx;height:38rpx;display:flex;align-items:center;justify-content:center;border:2rpx solid #d8cec2;border-radius:50%;font-size:20rpx}.radio.active{border-color:var(--brand-700);background:var(--brand-700);color:white}.summary{padding:20rpx 24rpx}.summary>view{display:flex;justify-content:space-between;padding:11rpx 0;color:var(--muted);font-size:23rpx}.summary .discount{color:var(--danger)}.summary .summary-total{margin-top:8rpx;padding-top:20rpx;border-top:1rpx solid var(--line);color:var(--brand-900);font-size:29rpx;font-weight:800}
+.pay-bar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:18rpx 26rpx calc(18rpx + env(safe-area-inset-bottom));background:white;box-shadow:0 -8rpx 30rpx rgba(17,36,91,.08)}.pay-label{font-size:21rpx;color:var(--muted)}.pay-total{margin-left:10rpx;color:var(--danger);font-size:35rpx;font-weight:800}.pay-button{width:260rpx;height:82rpx;border-radius:20rpx;background:var(--brand);color:white;font-size:27rpx;font-weight:750}.pay-button.disabled{opacity:.4}.checkout-header{background:linear-gradient(145deg,#0637c9,#071a62)}.eyebrow{color:#edcf91}.store-icon{background:var(--brand-soft);color:var(--brand)}@media screen and (min-width:760px){.pay-bar{max-width:750px;margin:auto}}
+.item-stall{display:block;margin-top:5rpx;color:var(--brand);font-size:18rpx}
 </style>

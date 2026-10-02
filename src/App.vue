@@ -1,7 +1,7 @@
 <script>
 export default {
   onLaunch() {
-    console.info('[Campus Coffee] demo ready')
+    console.info('[Campus Ordering] ready')
   },
 }
 </script>
