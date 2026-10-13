@@ -1,0 +1,20 @@
+# 依赖与构建产物
+node_modules/
+dist/
+unpackage/
+
+# Python
+__pycache__/
+*.pyc
+
+# 数据与运行时
+*.db
+*.sqlite
+uploads/
+*.log
+
+# 本地工具与配置
+cloudflared.exe
+.claude/
+.playwright-mcp/
+.DS_Store

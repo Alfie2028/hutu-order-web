@@ -1,0 +1,13 @@
+/* 白蓝 */
+primary-theme{
+    --primary-color: #007AFF;
+    --background-color: #ffffff;
+    --text-color: white;
+}
+
+/* 白棕 */
+secondary-theme{
+    --primary-color: #8B7355;
+    --background-color: #f5f5f5;
+    --text-color: rgba(0, 0, 0, 0.2);
+}
